@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sinfonía Visual (Final Blindado)</title>
+    <title>Sinfonía Visual (Final)</title>
     <style>
         :root { --cursor-size: 10px; --cursor-bg: white; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -173,12 +173,10 @@
             };
 
             let audioContext, analyser, source;
-            let setupDone = false; // El guardián
-
+            let setupDone = false;
             muteBtn.addEventListener('click', (e) => {
-                if (setupDone) return; // Si ya se ejecutó, no hacer nada
-                setupDone = true; // Marcar como ejecutado
-
+                if (setupDone) return;
+                setupDone = true;
                 e.stopPropagation();
                 muteBtn.style.display = 'none';
 
@@ -206,12 +204,88 @@
                 animateParticles();
             });
 
+            // --- MOTOR DE PARTÍCULAS "MODO FIESTA" ---
             let particlesArray;
             const resizeParticleCanvas = () => { particleCanvas.width = window.innerWidth; particleCanvas.height = window.innerHeight; };
             resizeParticleCanvas(); window.addEventListener('resize', resizeParticleCanvas);
-            class Particle { /* ... (código de partículas sin cambios) ... */ }
-            function initParticles() { /* ... */ }
-            function animateParticles() { /* ... */ }
+            
+            class Particle {
+                constructor() {
+                    this.reset();
+                    this.velocityX = 0;
+                    this.velocityY = 0;
+                }
+
+                reset() {
+                    this.x = particleCanvas.width / 2;
+                    this.y = particleCanvas.height / 2;
+                    this.angle = Math.random() * Math.PI * 2;
+                    this.radius = Math.random() * 1.5 + 0.5;
+                    this.color = 'rgba(255, 255, 255, 0.8)';
+                    this.velocityX = 0;
+                    this.velocityY = 0;
+                }
+
+                update(bass, treble) {
+                    // 1. El "salto" de los bajos: añade una fuerza explosiva
+                    const bassForce = bass / 20;
+                    if (bassForce > 0.1) {
+                        this.velocityX += Math.cos(this.angle) * bassForce;
+                        this.velocityY += Math.sin(this.angle) * bassForce;
+                    }
+
+                    // 2. Fricción: la velocidad decae con el tiempo
+                    this.velocityX *= 0.94; // Fricción más fuerte para pulsos más nítidos
+                    this.velocityY *= 0.94;
+
+                    // 3. Actualiza la posición
+                    this.x += this.velocityX;
+                    this.y += this.velocityY;
+
+                    // 4. Los agudos controlan el brillo
+                    const opacity = Math.max(0.4, Math.min(1, treble / 80));
+                    this.color = `rgba(255, 255, 255, ${opacity})`;
+                    
+                    // 5. Si la partícula se sale de la pantalla, reiníciala
+                    if (this.x < 0 || this.x > particleCanvas.width || this.y < 0 || this.y > particleCanvas.height) {
+                        this.reset();
+                    }
+                }
+
+                draw() {
+                    pCtx.fillStyle = this.color;
+                    pCtx.beginPath();
+                    pCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    pCtx.fill();
+                }
+            }
+
+            function initParticles() {
+                particlesArray = [];
+                for (let i = 0; i < 200; i++) {
+                    particlesArray.push(new Particle());
+                }
+            }
+
+            function animateParticles() {
+                if (!analyser) return;
+                
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Un cálculo más sensible del bajo
+                const bass = dataArray.slice(0, Math.floor(bufferLength * 0.25)).reduce((a, b) => a + b, 0) / (bufferLength * 0.25);
+                const treble = dataArray.slice(Math.floor(bufferLength * 0.4)).reduce((a, b) => a + b, 0) / (bufferLength * 0.6);
+
+                pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+                particlesArray.forEach(p => { 
+                    p.update(bass, treble);
+                    p.draw();
+                });
+                
+                requestAnimationFrame(animateParticles);
+            }
         });
     </script>
 </body>
