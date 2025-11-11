@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Panita6</title>
+  <title>Panita9</title>
   <style>
     :root {
       --cursor-size: 12px;
@@ -28,8 +28,6 @@
       -webkit-user-select: none;
       -moz-user-select: none;
       -ms-user-select: none;
-      touch-action: none;
-      overscroll-behavior: none;
       -webkit-touch-callout: none;
       -webkit-tap-highlight-color: transparent;
     }
@@ -59,7 +57,7 @@
       z-index: 50;
       mix-blend-mode: difference;
       pointer-events: auto;
-      touch-action: none;
+      touch-action: none; /* Desactiva gestos del navegador mientras se dibuja */
     }
 
     .perspective-wrapper {
@@ -130,7 +128,7 @@
     }
     #custom-cursor.hidden { opacity: 0; }
 
-    /* Botón de volumen: fijo y por encima del canvas */
+    /* Botón de volumen fijo y por encima del canvas */
     #audio-toggle-btn {
       position: fixed;
       top: 16px; right: 16px;
@@ -173,7 +171,7 @@
     </div>
   </div>
 
-  <!-- Botón fuera del contenedor, por encima del canvas -->
+  <!-- Botón fuera del contenedor para no competir con el canvas -->
   <button id="audio-toggle-btn" aria-label="Activar o silenciar audio" title="Activar audio" class="muted">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9zM12 4L9.91 6.09 12 8.18V4z"/>
@@ -192,7 +190,7 @@
       const pCtx = particleCanvas.getContext('2d');
       const audioToggleBtn = document.getElementById('audio-toggle-btn');
 
-      // Mostrar cursor y tilt con Pointer Events
+      // Cursor y tilt con Pointer Events; mostrar también en tap
       let cursorIdleTimer;
       function updateCursorPosition(clientX, clientY) {
         cursor.classList.remove('hidden');
@@ -221,7 +219,7 @@
         syncLoop();
       });
 
-      // Canvases tamaños
+      // Resize canvases
       const resizeDrawingCanvas = () => {
         drawingCanvas.width = window.innerWidth;
         drawingCanvas.height = window.innerHeight;
@@ -240,14 +238,14 @@
       dCtx.lineCap = 'round';
       dCtx.lineJoin = 'round';
 
-      // Dibujo con Pointer Events
-      let drawingReady = true; // Habilitado por defecto
+      // Dibujo con Pointer Events + captura
+      let drawingReady = true; // habilitado por defecto
       let isDrawing = false, lastX = 0, lastY = 0;
 
       function handleStart(e) {
         if (!drawingReady) return;
 
-        // Evitar dibujar si el toque es sobre el botón (defensa extra)
+        // Ignora si el toque cae sobre el botón
         const btn = audioToggleBtn.getBoundingClientRect();
         if (e.clientX >= btn.left && e.clientX <= btn.right && e.clientY >= btn.top && e.clientY <= btn.bottom) return;
 
@@ -257,13 +255,13 @@
         isDrawing = true;
         lastX = e.clientX; lastY = e.clientY;
 
-        // Marca inicial para que un "tap" deje punto visible
+        // Punto inicial para que el tap deje marca
         dCtx.beginPath();
         dCtx.arc(lastX, lastY, Math.max(1, dCtx.lineWidth / 2), 0, Math.PI * 2);
         dCtx.fillStyle = dCtx.strokeStyle;
         dCtx.fill();
 
-        // Asegura el cursor visible en el tap
+        // Cursor visible en tap
         cursor.classList.remove('hidden');
         cursor.style.left = `${e.clientX}px`;
         cursor.style.top = `${e.clientY}px`;
@@ -285,11 +283,20 @@
         try { drawingCanvas.releasePointerCapture(e.pointerId); } catch {}
       }
 
-      drawingCanvas.addEventListener('pointerdown', handleStart);
-      drawingCanvas.addEventListener('pointermove', handleMove);
+      // Listeners del canvas: no pasivos (se usa preventDefault)
+      drawingCanvas.addEventListener('pointerdown', handleStart, { passive: false });
+      drawingCanvas.addEventListener('pointermove', handleMove, { passive: false });
       drawingCanvas.addEventListener('pointerup', handleEnd);
       drawingCanvas.addEventListener('pointercancel', handleEnd);
       drawingCanvas.addEventListener('pointerleave', handleEnd);
+
+      // Fallback básico si no hay Pointer Events (muy raro hoy)
+      if (!window.PointerEvent) {
+        const getTouch = (e) => (e.touches && e.touches[0]) || e.changedTouches[0];
+        drawingCanvas.addEventListener('touchstart', (e) => handleStart(Object.assign(e, { clientX: getTouch(e).clientX, clientY: getTouch(e).clientY, pointerId: 1 })), { passive: false });
+        drawingCanvas.addEventListener('touchmove', (e) => handleMove(Object.assign(e, { clientX: getTouch(e).clientX, clientY: getTouch(e).clientY, pointerId: 1 })), { passive: false });
+        drawingCanvas.addEventListener('touchend', (e) => handleEnd(Object.assign(e, { pointerId: 1 })));
+      }
 
       // Estela de desvanecimiento
       function fadeDrawingTrail() {
@@ -300,7 +307,7 @@
       }
       fadeDrawingTrail();
 
-      // Botón de audio (toggle mute, no bloquea dibujo)
+      // Botón de audio: no interfiere con el canvas
       audioToggleBtn.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
       });
@@ -321,8 +328,7 @@
 
         mainVideo.muted = !mainVideo.muted;
         audioToggleBtn.classList.toggle('muted', mainVideo.muted);
-
-        // Si quieres ocultar el botón tras activar audio, descomenta:
+        // Si quieres ocultarlo cuando se active el audio:
         // if (!mainVideo.muted) audioToggleBtn.style.display = 'none';
       });
 
@@ -369,27 +375,29 @@
       let peakCooldown = 0;
 
       function animateParticles() {
-        if (!window.analyser) return;
-
         const analyser = window.analyser;
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        analyser.getByteFrequencyData(dataArray);
 
-        const bassRange = dataArray.slice(0, Math.floor(bufferLength * 0.13));
-        const bass = bassRange.reduce((a, b) => a + b, 0) / bassRange.length;
-        const trebleRange = dataArray.slice(Math.floor(bufferLength * 0.5));
-        const treble = trebleRange.reduce((a, b) => a + b, 0) / trebleRange.length;
+        let treble = 50; // valor por defecto si no hay audio
+        if (analyser) {
+          const bufferLength = analyser.frequencyBinCount;
+          const dataArray = new Uint8Array(bufferLength);
+          analyser.getByteFrequencyData(dataArray);
 
-        const bassJump = bass - lastBass;
-        const bassThreshold = 80;
+          const bassRange = dataArray.slice(0, Math.floor(bufferLength * 0.13));
+          const bass = bassRange.reduce((a, b) => a + b, 0) / bassRange.length;
+          const trebleRange = dataArray.slice(Math.floor(bufferLength * 0.5));
+          treble = trebleRange.reduce((a, b) => a + b, 0) / trebleRange.length;
 
-        if (peakCooldown <= 0 && bassJump > 10 && bass >= bassThreshold) {
-          createNebula(Math.random() * particleCanvas.width, Math.random() * particleCanvas.height);
-          peakCooldown = 11;
+          const bassJump = bass - lastBass;
+          const bassThreshold = 80;
+
+          if (peakCooldown <= 0 && bassJump > 10 && bass >= bassThreshold) {
+            createNebula(Math.random() * particleCanvas.width, Math.random() * particleCanvas.height);
+            peakCooldown = 11;
+          }
+          peakCooldown = Math.max(0, peakCooldown - 1);
+          lastBass = bass;
         }
-        peakCooldown = Math.max(0, peakCooldown - 1);
-        lastBass = bass;
 
         pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
         for (let i = particlesArray.length - 1; i >= 0; i--) {
