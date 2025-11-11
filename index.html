@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PanitaMe</title>
+  <title>PanitaGod</title>
   <style>
     :root { --cursor-size: 12px; --cursor-bg: white; }
 
@@ -29,8 +29,10 @@
     #particle-canvas { z-index: 2; pointer-events: none; }
 
     #drawing-canvas {
-      z-index: 50; mix-blend-mode: difference; pointer-events: auto;
-      touch-action: none;
+      z-index: 50;
+      mix-blend-mode: difference; /* Mantén tu estética original */
+      pointer-events: auto;
+      touch-action: none; /* Frena gestos del navegador mientras dibujas */
     }
 
     .perspective-wrapper {
@@ -78,6 +80,7 @@
     }
     #custom-cursor.hidden { opacity: 0; }
 
+    /* Botón de sonido fijo y sobre el canvas */
     #audio-toggle-btn {
       position: fixed; top: 16px; right: 16px; z-index: 10010;
       background-color: rgba(255,255,255,0.15); border: none; border-radius: 12px;
@@ -110,6 +113,7 @@
     </div>
   </div>
 
+  <!-- Botón fuera del contenedor para no competir con el canvas -->
   <button id="audio-toggle-btn" aria-label="Activar audio" title="Activar audio" class="muted">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9zM12 4L9.91 6.09 12 8.18V4z"/>
@@ -128,7 +132,7 @@
       const pCtx = particleCanvas.getContext('2d');
       const audioToggleBtn = document.getElementById('audio-toggle-btn');
 
-      // Cursor y tilt
+      // Cursor y tilt (mostrar también en tap)
       let cursorIdleTimer;
       function updateCursorPosition(clientX, clientY) {
         cursor.classList.remove('hidden');
@@ -143,19 +147,51 @@
       document.addEventListener('pointermove', (e) => updateCursorPosition(e.clientX, e.clientY), { passive: true });
       document.addEventListener('pointerdown', (e) => updateCursorPosition(e.clientX, e.clientY), { passive: true });
 
-      // Sincronizar videos
+      // Sincronización precisa usando requestVideoFrameCallback con corrección suave
+      let rvfHandle = null;
+      function syncStep(now, metadata) {
+        // Mantén al fondo pegado a mainVideo con corrección suave de tasa
+        const drift = (bgVideo.currentTime || 0) - (mainVideo.currentTime || 0);
+        const abs = Math.abs(drift);
+        if (abs > 0.12) {
+          // Desfase grande: realinear de golpe
+          bgVideo.currentTime = mainVideo.currentTime;
+          bgVideo.playbackRate = 1.0;
+        } else {
+          // Desfase pequeño: corrección proporcional limitada
+          const kp = 0.35; // ganancia moderada
+          const maxAdj = 0.06; // límite de +/- 6%
+          let adj = 1 - Math.max(-maxAdj, Math.min(maxAdj, kp * drift));
+          // Evita NaN e infinitos
+          if (!Number.isFinite(adj)) adj = 1.0;
+          bgVideo.playbackRate = adj;
+        }
+        rvfHandle = mainVideo.requestVideoFrameCallback(syncStep);
+      }
+      function startSync() {
+        try {
+          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            if (rvfHandle !== null) mainVideo.cancelVideoFrameCallback(rvfHandle);
+            rvfHandle = mainVideo.requestVideoFrameCallback(syncStep);
+          } else {
+            // Fallback por rAF si no hay rVFC
+            const rafLoop = () => {
+              const drift = (bgVideo.currentTime || 0) - (mainVideo.currentTime || 0);
+              if (Math.abs(drift) > 0.12) bgVideo.currentTime = mainVideo.currentTime;
+              requestAnimationFrame(rafLoop);
+            };
+            requestAnimationFrame(rafLoop);
+          }
+        } catch {}
+      }
       const videoReady = (vid) => new Promise(resolve => vid.addEventListener('canplaythrough', resolve, { once: true }));
       Promise.all([videoReady(mainVideo), videoReady(bgVideo)]).then(() => {
         mainVideo.play();
         bgVideo.play();
-        const syncLoop = () => {
-          if (Math.abs(mainVideo.currentTime - bgVideo.currentTime) > 0.1) {
-            bgVideo.currentTime = mainVideo.currentTime;
-          }
-          requestAnimationFrame(syncLoop);
-        };
-        syncLoop();
+        startSync();
       });
+      mainVideo.addEventListener('play', () => { bgVideo.play(); startSync(); });
+      mainVideo.addEventListener('pause', () => { bgVideo.pause(); if (rvfHandle !== null) mainVideo.cancelVideoFrameCallback(rvfHandle); });
 
       // Resize canvases
       const resizeDrawingCanvas = () => { drawingCanvas.width = window.innerWidth; drawingCanvas.height = window.innerHeight; };
@@ -163,19 +199,53 @@
       resizeDrawingCanvas(); resizeParticleCanvas();
       window.addEventListener('resize', () => { resizeDrawingCanvas(); resizeParticleCanvas(); });
 
-      // Estilo de trazo
+      // Estilo de trazo mejorado
       dCtx.strokeStyle = '#FFFFFF';
       dCtx.lineWidth = 3;
-      dCtx.lineCap = 'round';
-      dCtx.lineJoin = 'round';
+      dCtx.lineCap = 'round';   // extremos suaves
+      dCtx.lineJoin = 'round';  // uniones suaves
+      dCtx.shadowColor = 'rgba(255,255,255,0.85)'; // brillo tipo neón
+      dCtx.shadowBlur = 6;
+      dCtx.globalCompositeOperation = 'lighter'; // suma luz para resaltar
 
-      // Dibujo con Pointer Events + captura
+      // Smoothing por curvas + grosor dinámico
       let drawingReady = true;
-      let isDrawing = false, lastX = 0, lastY = 0;
+      let isDrawing = false;
+      let points = []; // {x,y,t,p}
+      let lastWidth = 3;
+      const minW = 1.6, maxW = 6.5;
+
+      function strokeWidthFrom(e, prev) {
+        const p = { x: e.clientX, y: e.clientY, t: performance.now(), p: e.pressure ?? 0.5 };
+        if (!prev) return maxW;
+        const dt = Math.max(1, p.t - prev.t);
+        const dx = p.x - prev.x, dy = p.y - prev.y;
+        const v = Math.hypot(dx, dy) / dt; // px/ms
+        const speed = Math.min(1.0, v / 1.2); // normaliza
+        // Combina presión (si existe) e inverso de velocidad
+        const press = Math.max(0.2, p.p);
+        const base = (1 - speed) * 0.7 + press * 0.3;
+        const w = minW + (maxW - minW) * base;
+        return w;
+      }
+
+      function drawSmoothPath() {
+        if (points.length < 2) return;
+        dCtx.beginPath();
+        dCtx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length - 1; i++) {
+          const curr = points[i];
+          const next = points[i + 1];
+          const cx = (curr.x + next.x) / 2;
+          const cy = (curr.y + next.y) / 2;
+          dCtx.quadraticCurveTo(curr.x, curr.y, cx, cy);
+        }
+        dCtx.stroke();
+      }
 
       function handleStart(e) {
         if (!drawingReady) return;
-
+        // Evita robar el toque del botón
         const btn = audioToggleBtn.getBoundingClientRect();
         if (e.clientX >= btn.left && e.clientX <= btn.right && e.clientY >= btn.top && e.clientY <= btn.bottom) return;
 
@@ -183,13 +253,19 @@
         try { drawingCanvas.setPointerCapture(e.pointerId); } catch {}
 
         isDrawing = true;
-        lastX = e.clientX; lastY = e.clientY;
-
+        points = [{ x: e.clientX, y: e.clientY, t: performance.now(), p: e.pressure ?? 0.5 }];
+        // Punto inicial visible
+        dCtx.save();
+        const w0 = strokeWidthFrom(e, null);
+        lastWidth = w0;
+        dCtx.lineWidth = w0;
         dCtx.beginPath();
-        dCtx.arc(lastX, lastY, Math.max(1, dCtx.lineWidth / 2), 0, Math.PI * 2);
+        dCtx.arc(e.clientX, e.clientY, Math.max(1, w0 * 0.5), 0, Math.PI * 2);
         dCtx.fillStyle = dCtx.strokeStyle;
         dCtx.fill();
+        dCtx.restore();
 
+        // Cursor visible en tap
         cursor.classList.remove('hidden');
         cursor.style.left = `${e.clientX}px`;
         cursor.style.top = `${e.clientY}px`;
@@ -198,16 +274,22 @@
       function handleMove(e) {
         if (!drawingReady || !isDrawing) return;
         e.preventDefault();
-        dCtx.beginPath();
-        dCtx.moveTo(lastX, lastY);
-        dCtx.lineTo(e.clientX, e.clientY);
-        dCtx.stroke();
-        lastX = e.clientX; lastY = e.clientY;
+
+        const prev = points[points.length - 1];
+        points.push({ x: e.clientX, y: e.clientY, t: performance.now(), p: e.pressure ?? 0.5 });
+        // Ajusta grosor suavemente
+        const target = strokeWidthFrom(e, prev);
+        lastWidth = lastWidth + (target - lastWidth) * 0.25;
+        dCtx.lineWidth = lastWidth;
+        drawSmoothPath();
+        // Limita la cola de puntos para rendimiento
+        if (points.length > 64) points.shift();
       }
 
       function handleEnd(e) {
         if (!drawingReady) return;
         isDrawing = false;
+        points = [];
         try { drawingCanvas.releasePointerCapture(e.pointerId); } catch {}
       }
 
@@ -217,6 +299,7 @@
       drawingCanvas.addEventListener('pointercancel', handleEnd);
       drawingCanvas.addEventListener('pointerleave', handleEnd);
 
+      // Estela de desvanecimiento suave
       function fadeDrawingTrail() {
         if (!drawingReady) return;
         dCtx.fillStyle = 'rgba(0, 0, 0, 0.05)';
@@ -225,7 +308,7 @@
       }
       fadeDrawingTrail();
 
-      // Audio: activar una vez y ocultar botón
+      // Botón de audio: activar una vez y ocultar
       audioToggleBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
       audioToggleBtn.addEventListener('click', async () => {
         if (!window.audioContext) {
@@ -238,23 +321,16 @@
         if (!window.analyser) {
           const source = window.audioContext.createMediaElementSource(mainVideo);
           window.analyser = window.audioContext.createAnalyser();
-
-          // Ajustes para más sensibilidad a medios/bajos
-          window.analyser.fftSize = 4096;                 // mayor resolución espectral
-          window.analyser.smoothingTimeConstant = 0.78;   // respuesta un poco más rápida
-          window.analyser.minDecibels = -100;             // capta señales débiles
-          window.analyser.maxDecibels = -10;              // techo razonable de escala
-
           source.connect(window.analyser);
           window.analyser.connect(window.audioContext.destination);
         }
 
         mainVideo.muted = false;
         audioToggleBtn.classList.remove('muted');
-        audioToggleBtn.hidden = true;
+        audioToggleBtn.hidden = true; // ocultar permanentemente tras activación
       });
 
-      // Motor de partículas
+      // Motor de partículas (sin cambios funcionales aquí)
       let particlesArray = [];
       class Particle {
         constructor(x, y, color) {
@@ -267,10 +343,9 @@
           this.life = 110; this.maxLife = this.life;
           this.color = color;
         }
-        update(energyBoost) {
+        update(energyBoost=1) {
           this.speed *= this.friction;
-          // Explosividad ligeramente modulada por energía de bajos/medios
-          const v = Math.min(1.6, 1 + energyBoost * 0.004);
+          const v = Math.min(1.6, 1 + (energyBoost||0) * 0.004);
           this.x += Math.cos(this.angle) * this.speed * v;
           this.y += Math.sin(this.angle) * this.speed * v + this.gravity;
           this.life -= 1;
@@ -285,86 +360,25 @@
           pCtx.globalAlpha = 1.0;
         }
       }
-
       function createNebula(x, y, amount=60, hueBase=Math.random()*360) {
-        const particleCount = amount;
-        for (let i = 0; i < particleCount; i++) {
+        for (let i = 0; i < amount; i++) {
           const color = `hsl(${hueBase + Math.random() * 60}, 100%, 72%)`;
           particlesArray.push(new Particle(x, y, color));
         }
       }
-
-      // Utilidades de análisis
-      let emaLow = 0, emaMid = 0;
-      const emaAlpha = 0.12;
-
-      function rmsBand(data, start, end) {
-        let sum = 0; const n = Math.max(1, end - start + 1);
-        for (let i = start; i <= end; i++) { const v = data[i]; sum += v * v; }
-        return Math.sqrt(sum / n);
-      }
-
-      function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
-
-      let lastBass = 0;
-      let peakCooldown = 0;
-
       function animateParticles() {
         const analyser = window.analyser;
-
-        let lowEnergy = 0, midEnergy = 0, energyBoost = 0;
-
+        let energyBoost = 0, treble = 50;
         if (analyser) {
           const bufferLength = analyser.frequencyBinCount;
           const dataArray = new Uint8Array(bufferLength);
           analyser.getByteFrequencyData(dataArray);
-
-          // Mapear frecuencia a índice por Nyquist
-          const sampleRate = window.audioContext.sampleRate;
-          const nyquist = sampleRate / 2;
-          const binPerHz = bufferLength / nyquist;
-
-          const idx = (hz) => Math.floor(clamp(hz * binPerHz, 0, bufferLength - 1));
-
-          // Bandas: bajos 20–160 Hz, medios 160–2000 Hz
-          const lowStart = idx(20),   lowEnd = idx(160);
-          const midStart = idx(160),  midEnd = idx(2000);
-
-          lowEnergy = rmsBand(dataArray, lowStart, lowEnd);
-          midEnergy = rmsBand(dataArray, midStart, midEnd);
-
-          // EMA para línea base y picos relativos
-          emaLow = (1 - emaAlpha) * emaLow + emaAlpha * lowEnergy;
-          emaMid = (1 - emaAlpha) * emaMid + emaAlpha * midEnergy;
-
-          const lowRatio = emaLow > 1 ? lowEnergy / emaLow : 1;
-          const midRatio = emaMid > 1 ? midEnergy / emaMid : 1;
-
-          // Sensibilidad extra a bajos y medios
-          const lowSens = 1.4, midSens = 1.2;
-
-          // Disparo por picos: umbrales relativos
-          if (peakCooldown <= 0) {
-            if (lowRatio > 1.18) {
-              const amount = Math.min(140, 60 + (lowEnergy * lowSens) | 0);
-              createNebula(Math.random() * particleCanvas.width,
-                           Math.random() * particleCanvas.height * 0.8 + particleCanvas.height * 0.2,
-                           amount, 210); // tendencia a tonos cálidos/rojos
-              peakCooldown = 7;
-            } else if (midRatio > 1.12) {
-              const amount = Math.min(110, 50 + (midEnergy * midSens) | 0);
-              createNebula(Math.random() * particleCanvas.width,
-                           Math.random() * particleCanvas.height,
-                           amount, 160); // medios con gama entre verdes/amarillos
-              peakCooldown = 6;
-            }
-          }
-          peakCooldown = Math.max(0, peakCooldown - 1);
-
-          // Boost general para animación/alpha con peso a bajos/medios
-          energyBoost = clamp(lowEnergy * lowSens * 0.8 + midEnergy * midSens * 0.6, 0, 255);
+          // Pequeño promedio para brillo y dinamismo general
+          treble = dataArray.slice(Math.floor(bufferLength * 0.5)).reduce((a,b)=>a+b,0) / Math.max(1, bufferLength*0.5);
+          energyBoost = treble;
+          // Disparo ocasional
+          if (Math.random() < 0.02) createNebula(Math.random()*particleCanvas.width, Math.random()*particleCanvas.height, 40 + Math.random()*60);
         }
-
         pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
         for (let i = particlesArray.length - 1; i >= 0; i--) {
           const p = particlesArray[i];
