@@ -3,150 +3,90 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Panita9</title>
+  <title>Panita7</title>
   <style>
-    :root {
-      --cursor-size: 12px;
-      --cursor-bg: white;
-    }
+    :root { --cursor-size: 12px; --cursor-bg: white; }
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes reveal {
-      from { opacity: 0; transform: translateY(30px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
+    @keyframes reveal { from { opacity: 0; transform: translateY(30px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
     html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      overflow: hidden;
-      cursor: none;
+      margin: 0; padding: 0; height: 100%; overflow: hidden; cursor: none;
       background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      user-select: none;
-      -webkit-user-select: none;
-      -moz-user-select: none;
-      -ms-user-select: none;
-      -webkit-touch-callout: none;
-      -webkit-tap-highlight-color: transparent;
+      user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;
+      -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
     }
 
-    #background-video,
-    #particle-canvas,
-    #drawing-canvas {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
+    #background-video, #particle-canvas, #drawing-canvas {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     }
 
     #background-video {
-      z-index: 1;
-      filter: blur(45px) brightness(0.55);
-      object-fit: cover;
-      animation: fadeIn 1.8s ease-out;
-      pointer-events: none;
+      z-index: 1; filter: blur(45px) brightness(0.55); object-fit: cover; animation: fadeIn 1.8s ease-out; pointer-events: none;
     }
 
-    #particle-canvas {
-      z-index: 2;
-      pointer-events: none;
-    }
+    #particle-canvas { z-index: 2; pointer-events: none; }
 
     #drawing-canvas {
-      z-index: 50;
-      mix-blend-mode: difference;
-      pointer-events: auto;
-      touch-action: none; /* Desactiva gestos del navegador mientras se dibuja */
+      z-index: 50; mix-blend-mode: difference; pointer-events: auto;
+      touch-action: none;
     }
 
     .perspective-wrapper {
-      display: flex; justify-content: center; align-items: center;
-      height: 100%;
-      perspective: 1500px;
-      position: relative;
-      z-index: 3;
-      pointer-events: none;
+      display: flex; justify-content: center; align-items: center; height: 100%;
+      perspective: 1500px; position: relative; z-index: 3; pointer-events: none;
     }
 
     .video-container {
-      width: 680px; max-width: 95%;
-      transform-style: preserve-3d;
-      animation: reveal 1s ease-out 0.5s backwards;
-      pointer-events: none;
-      user-select: none;
-      position: relative;
+      width: 680px; max-width: 95%; transform-style: preserve-3d;
+      animation: reveal 1s ease-out 0.5s backwards; pointer-events: none; user-select: none; position: relative;
     }
 
     #video-card {
       background: linear-gradient(145deg, #171e26, #1d2733);
-      border-radius: 22px;
-      box-shadow: 0 30px 90px rgba(0,0,0,0.55);
-      overflow: hidden;
-      transform: translateZ(0);
-      transition: box-shadow 0.5s ease;
-      pointer-events: none;
-      user-select: none;
-      border: 2px solid #3a4a5a;
+      border-radius: 22px; box-shadow: 0 30px 90px rgba(0,0,0,0.55);
+      overflow: hidden; transform: translateZ(0); transition: box-shadow 0.5s ease;
+      pointer-events: none; user-select: none; border: 2px solid #3a4a5a;
     }
     #video-card::after {
-      content: '';
-      position: absolute; inset: 0;
+      content: ''; position: absolute; inset: 0;
       background: radial-gradient(circle at center, rgba(255,255,255,0.15) 0%, transparent 70%);
-      opacity: 0; border-radius: 22px;
-      transition: opacity 0.5s ease;
-      pointer-events: none;
+      opacity: 0; border-radius: 22px; transition: opacity 0.5s ease; pointer-events: none;
     }
     .video-container:hover #video-card { box-shadow: 0 50px 130px rgba(0,0,0,0.65); }
     .video-container:hover #video-card::after { opacity: 1; }
 
     #miVideo {
-      display: block; width: 100%; height: auto;
-      pointer-events: none; user-select: none;
+      display: block; width: 100%; height: auto; pointer-events: none; user-select: none;
       filter: contrast(1.05) saturate(1.1);
     }
 
     #video-title {
-      color: #f3f7fa;
-      font-weight: 900; font-size: 1.8rem; text-align: center;
-      margin-top: 32px; opacity: 0.92; letter-spacing: 2px;
-      text-shadow: 0 3px 8px rgba(0, 0, 0, 0.85);
-      pointer-events: none; user-select: none;
-      transition: transform 0.4s ease, opacity 0.4s ease;
+      color: #f3f7fa; font-weight: 900; font-size: 1.8rem; text-align: center;
+      margin-top: 32px; opacity: 0.92; letter-spacing: 2px; text-shadow: 0 3px 8px rgba(0,0,0,0.85);
+      pointer-events: none; user-select: none; transition: transform 0.4s ease, opacity 0.4s ease;
     }
     .video-container:hover #video-title { transform: translateY(-20px); opacity: 1; }
 
     #custom-cursor {
-      position: fixed;
-      width: var(--cursor-size); height: var(--cursor-size);
+      position: fixed; width: var(--cursor-size); height: var(--cursor-size);
       background-color: var(--cursor-bg); border-radius: 50%;
       top: 0; left: 0; transform: translate(-50%, -50%);
-      pointer-events: none; mix-blend-mode: difference;
-      z-index: 9999;
-      filter: drop-shadow(0 0 10px white);
-      transition: transform 0.2s ease-out, opacity 0.5s ease-out;
+      pointer-events: none; mix-blend-mode: difference; z-index: 9999;
+      filter: drop-shadow(0 0 10px white); transition: transform 0.2s ease-out, opacity 0.5s ease-out;
     }
     #custom-cursor.hidden { opacity: 0; }
 
-    /* Botón de volumen fijo y por encima del canvas */
+    /* Botón de sonido fijo y sobre el canvas */
     #audio-toggle-btn {
-      position: fixed;
-      top: 16px; right: 16px;
-      z-index: 10010;
-      background-color: rgba(255,255,255,0.15);
-      border: none; border-radius: 12px;
-      width: 42px; height: 42px;
-      display: flex; justify-content: center; align-items: center;
-      transition: background-color 0.3s ease;
-      pointer-events: auto;
-      touch-action: manipulation;
+      position: fixed; top: 16px; right: 16px; z-index: 10010;
+      background-color: rgba(255,255,255,0.15); border: none; border-radius: 12px;
+      width: 42px; height: 42px; display: flex; justify-content: center; align-items: center;
+      transition: background-color 0.3s ease; pointer-events: auto; touch-action: manipulation;
     }
     #audio-toggle-btn:hover { background-color: rgba(255,255,255,0.4); }
-    #audio-toggle-btn svg {
-      width: 24px; height: 24px; fill: white;
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
-      transition: transform 0.2s ease;
-    }
+    #audio-toggle-btn.svg { width: 24px; height: 24px; fill: white; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7)); transition: transform 0.2s ease; }
     #audio-toggle-btn.muted svg { transform: scale(0.85); opacity: 0.6; }
   </style>
 </head>
@@ -172,7 +112,7 @@
   </div>
 
   <!-- Botón fuera del contenedor para no competir con el canvas -->
-  <button id="audio-toggle-btn" aria-label="Activar o silenciar audio" title="Activar audio" class="muted">
+  <button id="audio-toggle-btn" aria-label="Activar audio" title="Activar audio" class="muted">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9zM12 4L9.91 6.09 12 8.18V4z"/>
     </svg>
@@ -190,7 +130,7 @@
       const pCtx = particleCanvas.getContext('2d');
       const audioToggleBtn = document.getElementById('audio-toggle-btn');
 
-      // Cursor y tilt con Pointer Events; mostrar también en tap
+      // Cursor y tilt
       let cursorIdleTimer;
       function updateCursorPosition(clientX, clientY) {
         cursor.classList.remove('hidden');
@@ -220,16 +160,9 @@
       });
 
       // Resize canvases
-      const resizeDrawingCanvas = () => {
-        drawingCanvas.width = window.innerWidth;
-        drawingCanvas.height = window.innerHeight;
-      };
-      const resizeParticleCanvas = () => {
-        particleCanvas.width = window.innerWidth;
-        particleCanvas.height = window.innerHeight;
-      };
-      resizeDrawingCanvas();
-      resizeParticleCanvas();
+      const resizeDrawingCanvas = () => { drawingCanvas.width = window.innerWidth; drawingCanvas.height = window.innerHeight; };
+      const resizeParticleCanvas = () => { particleCanvas.width = window.innerWidth; particleCanvas.height = window.innerHeight; };
+      resizeDrawingCanvas(); resizeParticleCanvas();
       window.addEventListener('resize', () => { resizeDrawingCanvas(); resizeParticleCanvas(); });
 
       // Estilo de trazo
@@ -239,13 +172,13 @@
       dCtx.lineJoin = 'round';
 
       // Dibujo con Pointer Events + captura
-      let drawingReady = true; // habilitado por defecto
+      let drawingReady = true;
       let isDrawing = false, lastX = 0, lastY = 0;
 
       function handleStart(e) {
         if (!drawingReady) return;
 
-        // Ignora si el toque cae sobre el botón
+        // Evita dibujar si el toque cae sobre el botón
         const btn = audioToggleBtn.getBoundingClientRect();
         if (e.clientX >= btn.left && e.clientX <= btn.right && e.clientY >= btn.top && e.clientY <= btn.bottom) return;
 
@@ -255,7 +188,7 @@
         isDrawing = true;
         lastX = e.clientX; lastY = e.clientY;
 
-        // Punto inicial para que el tap deje marca
+        // Punto inicial en tap
         dCtx.beginPath();
         dCtx.arc(lastX, lastY, Math.max(1, dCtx.lineWidth / 2), 0, Math.PI * 2);
         dCtx.fillStyle = dCtx.strokeStyle;
@@ -283,20 +216,11 @@
         try { drawingCanvas.releasePointerCapture(e.pointerId); } catch {}
       }
 
-      // Listeners del canvas: no pasivos (se usa preventDefault)
       drawingCanvas.addEventListener('pointerdown', handleStart, { passive: false });
       drawingCanvas.addEventListener('pointermove', handleMove, { passive: false });
       drawingCanvas.addEventListener('pointerup', handleEnd);
       drawingCanvas.addEventListener('pointercancel', handleEnd);
       drawingCanvas.addEventListener('pointerleave', handleEnd);
-
-      // Fallback básico si no hay Pointer Events (muy raro hoy)
-      if (!window.PointerEvent) {
-        const getTouch = (e) => (e.touches && e.touches[0]) || e.changedTouches[0];
-        drawingCanvas.addEventListener('touchstart', (e) => handleStart(Object.assign(e, { clientX: getTouch(e).clientX, clientY: getTouch(e).clientY, pointerId: 1 })), { passive: false });
-        drawingCanvas.addEventListener('touchmove', (e) => handleMove(Object.assign(e, { clientX: getTouch(e).clientX, clientY: getTouch(e).clientY, pointerId: 1 })), { passive: false });
-        drawingCanvas.addEventListener('touchend', (e) => handleEnd(Object.assign(e, { pointerId: 1 })));
-      }
 
       // Estela de desvanecimiento
       function fadeDrawingTrail() {
@@ -307,11 +231,10 @@
       }
       fadeDrawingTrail();
 
-      // Botón de audio: no interfiere con el canvas
-      audioToggleBtn.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-      });
+      // Botón de audio: activar una sola vez y ocultar
+      audioToggleBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
       audioToggleBtn.addEventListener('click', async () => {
+        // Crear/reanudar AudioContext en gesto del usuario
         if (!window.audioContext) {
           window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
@@ -319,6 +242,7 @@
           await window.audioContext.resume();
         }
 
+        // Crear analyser si no existe
         if (!window.analyser) {
           const source = window.audioContext.createMediaElementSource(mainVideo);
           window.analyser = window.audioContext.createAnalyser();
@@ -326,12 +250,12 @@
           window.analyser.connect(window.audioContext.destination);
         }
 
-        mainVideo.muted = !mainVideo.muted;
-        audioToggleBtn.classList.toggle('muted', mainVideo.muted);
-        // Si quieres ocultarlo cuando se active el audio:
-        // if (!mainVideo.muted) audioToggleBtn.style.display = 'none';
+        // Activar audio y ocultar botón
+        mainVideo.muted = false;
+        audioToggleBtn.classList.remove('muted');
+        audioToggleBtn.hidden = true; // se retira del renderizado
       });
-
+      
       // Motor de partículas
       let particlesArray = [];
       class Particle {
@@ -377,7 +301,7 @@
       function animateParticles() {
         const analyser = window.analyser;
 
-        let treble = 50; // valor por defecto si no hay audio
+        let treble = 50;
         if (analyser) {
           const bufferLength = analyser.frequencyBinCount;
           const dataArray = new Uint8Array(bufferLength);
