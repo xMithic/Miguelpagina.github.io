@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PanitaMithic</title>
+  <title>PanitaMAthec</title>
   <style>
     :root {
       --cursor-size: 12px;
@@ -430,83 +430,262 @@
         }
       });
 
-      // Motor de partículas (ajuste leve al tono por agudos)
-      let particlesArray = [];
+      // Configuración de audio con bandas y analizadores
+      function setupAudioAnalyzers() {
+        if (!window.audioContext) {
+          window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const ctx = window.audioContext;
+
+        // Fuente
+        if (!window.mediaSource) {
+          window.mediaSource = ctx.createMediaElementSource(mainVideo);
+        }
+
+        // Filtros de banda
+        const low = ctx.createBiquadFilter();  // Graves
+        low.type = 'lowpass';
+        low.frequency.value = 180;
+        low.Q.value = 0.707;
+
+        const mid = ctx.createBiquadFilter();  // Medios
+        mid.type = 'bandpass';
+        mid.frequency.value = 1000;
+        mid.Q.value = 0.9;
+
+        const high = ctx.createBiquadFilter(); // Agudos
+        high.type = 'highpass';
+        high.frequency.value = 4000;
+        high.Q.value = 0.707;
+
+        // Analizadores
+        function makeAnalyser(smooth = 0.7, fft = 2048, minDb = -90, maxDb = -10) {
+          const an = ctx.createAnalyser();
+          an.fftSize = fft;
+          an.smoothingTimeConstant = smooth;
+          an.minDecibels = minDb;
+          an.maxDecibels = maxDb;
+          return an;
+        }
+        const aBass = makeAnalyser(0.65, 2048);
+        const aMid  = makeAnalyser(0.75, 2048);
+        const aHigh = makeAnalyser(0.6, 2048);
+
+        // Conexiones (en paralelo a destino)
+        window.mediaSource.connect(low);  low.connect(aBass);
+        window.mediaSource.connect(mid);  mid.connect(aMid);
+        window.mediaSource.connect(high); high.connect(aHigh);
+
+        // Salida audible
+        if (!window.masterGain) {
+          window.masterGain = ctx.createGain();
+          window.masterGain.gain.value = 1;
+          window.mediaSource.connect(window.masterGain);
+          window.masterGain.connect(ctx.destination);
+        }
+
+        window.audioBands = { aBass, aMid, aHigh };
+        window._bandBuffers = {
+          bass: new Uint8Array(aBass.frequencyBinCount),
+          mid:  new Uint8Array(aMid.frequencyBinCount),
+          high: new Uint8Array(aHigh.frequencyBinCount)
+        };
+        window._bandStats = {
+          bass: { ema: 0, var: 0 },
+          mid:  { ema: 0, var: 0 },
+          high: { ema: 0, var: 0 }
+        };
+      }
+
+      // Botón de audio
+      audioToggleBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+      });
+      audioToggleBtn.addEventListener('click', async () => {
+        if (!window.audioContext) {
+          window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (window.audioContext.state === 'suspended') {
+          await window.audioContext.resume();
+        }
+        if (!window.audioBands) {
+          setupAudioAnalyzers();
+        }
+
+        mainVideo.muted = !mainVideo.muted;
+        audioToggleBtn.classList.toggle('muted', mainVideo.muted);
+
+        if (!mainVideo.muted) {
+          audioToggleBtn.classList.add('vanish');
+        } else {
+          audioToggleBtn.classList.remove('vanish');
+        }
+      });
+
+      // Motor de partículas mejorado
+      pCtx.globalCompositeOperation = 'lighter';
+
+      const MAX_PARTICLES = 5000;
+      const particles = [];
+      const pool = [];
+
       class Particle {
-        constructor(x, y, color) {
-          this.x = x; this.y = y;
-          this.angle = Math.random() * Math.PI * 2;
-          this.speed = Math.random() * 4 + 1;
-          this.friction = 0.96;
-          this.gravity = 0.1;
-          this.radius = Math.random() * 2 + 1;
-          this.life = 100; this.maxLife = this.life;
-          this.color = color;
+        constructor() { this.alive = false; }
+        init(x, y, hue, speed, size, life, dir, gravity, friction) {
+          this.x = x;
+          this.y = y;
+          this.hue = hue;
+          this.speed = speed;
+          this.size = size;
+          this.life = life;
+          this.maxLife = life;
+          this.dir = dir;
+          this.gravity = gravity;
+          this.friction = friction;
+          this.alive = true;
         }
         update() {
           this.speed *= this.friction;
-          this.x += Math.cos(this.angle) * this.speed;
-          this.y += Math.sin(this.angle) * this.speed + this.gravity;
+          this.x += Math.cos(this.dir) * this.speed;
+          this.y += Math.sin(this.dir) * this.speed + this.gravity;
           this.life -= 1;
-          this.radius = Math.max(0, this.radius - 0.02);
+          this.size = Math.max(0.2, this.size * 0.995);
+          if (this.life <= 0) this.alive = false;
         }
-        draw(alphaBoost=1) {
-          pCtx.globalAlpha = (this.life / this.maxLife) * (alphaBoost / 100 + 0.5);
-          pCtx.fillStyle = this.color;
+        draw(alphaBoost = 1) {
+          const a = Math.max(0, (this.life / this.maxLife) * (0.5 + alphaBoost / 200));
+          pCtx.globalAlpha = a;
+          pCtx.fillStyle = `hsl(${this.hue}, 100%, 70%)`;
           pCtx.beginPath();
-          pCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+          pCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
           pCtx.fill();
-          pCtx.globalAlpha = 1.0;
+          pCtx.globalAlpha = 1;
         }
       }
 
-      function createNebula(x, y) {
-        const particleCount = 60;
-        const hue = Math.random() * 360;
-        for (let i = 0; i < particleCount; i++) {
-          const color = `hsl(${hue + Math.random() * 60}, 100%, 75%)`;
-          particlesArray.push(new Particle(x, y, color));
+      function getP() {
+        return pool.length ? pool.pop() : new Particle();
+      }
+      function spawn(x, y, count, baseHue, spread = 50, energy = 1, biasDir = null) {
+        for (let i = 0; i < count; i++) {
+          if (particles.length >= MAX_PARTICLES) break;
+          const p = getP();
+          const hue = (baseHue + (Math.random() * spread - spread / 2)) % 360;
+          const speed = 1 + Math.random() * (4 + 6 * energy);
+          const size = 0.8 + Math.random() * (2.2 + 1.8 * energy);
+          const life = 60 + Math.random() * (60 + 60 * energy);
+          const dir = biasDir !== null
+            ? biasDir + (Math.random() - 0.5) * (Math.PI / 2)
+            : Math.random() * Math.PI * 2;
+          const gravity = 0.05 + 0.15 * energy;
+          const friction = 0.96 - 0.05 * Math.min(1, energy);
+          p.init(x, y, (hue + 360) % 360, speed, size, life, dir, gravity, friction);
+          particles.push(p);
         }
       }
 
-      let lastBass = 0;
-      let peakCooldown = 0;
+      function recycleDead() {
+        for (let i = particles.length - 1; i >= 0; i--) {
+          if (!particles[i].alive) pool.push(particles.splice(i, 1)[0]);
+        }
+      }
+
+      // Estadística simple por banda (EMA + var) para umbral adaptativo
+      function updateStats(stat, value) {
+        const alpha = 0.18;
+        const diff = value - stat.ema;
+        stat.ema += alpha * diff;
+        stat.var = (1 - alpha) * (stat.var + alpha * diff * diff);
+        const sigma = Math.sqrt(Math.max(1e-6, stat.var));
+        return { mean: stat.ema, sigma };
+      }
+
+      let beatCooldown = 0;
+
+      function readBands() {
+        const bands = window.audioBands;
+        if (!bands) {
+          return { bass: 60, mid: 50, high: 55, hue: 200 };
+        }
+        const { aBass, aMid, aHigh } = bands;
+        const bufs = window._bandBuffers;
+
+        aBass.getByteFrequencyData(bufs.bass);
+        aMid.getByteFrequencyData(bufs.mid);
+        aHigh.getByteFrequencyData(bufs.high);
+
+        // Medias de energía por banda (0–255)
+        const avg = (arr) => {
+          let s = 0;
+          for (let i = 0; i < arr.length; i++) s += arr[i];
+          return s / arr.length;
+        };
+        const bass = avg(bufs.bass);
+        const mid  = avg(bufs.mid);
+        const high = avg(bufs.high);
+
+        // Estadísticos
+        const stB = updateStats(window._bandStats.bass, bass);
+        const stM = updateStats(window._bandStats.mid,  mid);
+        const stH = updateStats(window._bandStats.high, high);
+
+        // Hue orientado por agudos/medios
+        const hueBase = (180 + (high - 80) * 1.5 + (mid - 70) * 0.6) % 360;
+
+        return {
+          bass, mid, high,
+          hue: (hueBase + 360) % 360,
+          stats: { bass: stB, mid: stM, high: stH }
+        };
+      }
 
       function animateParticles() {
-        const analyser = window.analyser;
+        // Leer bandas
+        const band = readBands();
 
-        let treble = 50; // por defecto si no hay audio
-        if (analyser) {
-          const bufferLength = analyser.frequencyBinCount;
-          const dataArray = new Uint8Array(bufferLength);
-          analyser.getByteFrequencyData(dataArray);
-
-          const bassRange = dataArray.slice(0, Math.floor(bufferLength * 0.13));
-          const bass = bassRange.reduce((a, b) => a + b, 0) / bassRange.length;
-          const trebleRange = dataArray.slice(Math.floor(bufferLength * 0.5));
-          treble = trebleRange.reduce((a, b) => a + b, 0) / trebleRange.length;
-
-          const bassJump = bass - lastBass;
-          const bassThreshold = 20;
-
-          if (peakCooldown <= 0 && bassJump > 10 && bass >= bassThreshold) {
-            createNebula(Math.random() * particleCanvas.width, Math.random() * particleCanvas.height);
-            peakCooldown = 11;
-          }
-          peakCooldown = Math.max(0, peakCooldown - 1);
-          lastBass = bass;
-        }
-
+        // Fondo y emisión continua
         pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
-        for (let i = particlesArray.length - 1; i >= 0; i--) {
-          const p = particlesArray[i];
-          if (p.life <= 0) {
-            particlesArray.splice(i, 1);
-          } else {
-            p.update(treble);
-            p.draw(treble);
+
+        const W = particleCanvas.width;
+        const H = particleCanvas.height;
+
+        // Emisión ambiente escalada por energía total
+        const energy = (band.bass * 0.6 + band.mid * 0.3 + band.high * 0.1) / 255;
+        const ambientCount = Math.floor(2 + energy * 10);
+        for (let i = 0; i < ambientCount; i++) {
+          const x = Math.random() * W;
+          const y = Math.random() * H;
+          // Dirección sesgada por medios (más direccional cuando suben)
+          const dirBias = (band.mid - 60) / 255 * Math.PI;
+          spawn(x, y, 1, band.hue, 40, energy, dirBias);
+        }
+
+        // Disparador de golpe en graves con umbral adaptativo
+        if (beatCooldown > 0) beatCooldown -= 1;
+        if (band.stats) {
+          const mu = band.stats.bass.mean;
+          const sigma = band.stats.bass.sigma;
+          const k = 1.8; // sensibilidad de golpe
+          const isBeat = (band.bass > mu + k * sigma) && beatCooldown <= 0;
+
+          if (isBeat) {
+            const centerX = W * (0.3 + 0.4 * Math.random());
+            const centerY = H * (0.3 + 0.4 * Math.random());
+            const strength = Math.min(1.0, (band.bass - mu) / Math.max(1, 2 * sigma));
+            const burstCount = Math.floor(120 + strength * 360);
+            spawn(centerX, centerY, burstCount, band.hue, 70, 0.8 + strength * 0.8, null);
+            beatCooldown = 10; // ~10 frames de resguardo
           }
         }
+
+        // Actualizar y dibujar
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+          p.update();
+          p.draw((band.high - 60) / 2);
+        }
+
+        recycleDead();
         requestAnimationFrame(animateParticles);
       }
       animateParticles();
